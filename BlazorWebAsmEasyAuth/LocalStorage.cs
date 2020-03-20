@@ -1,7 +1,7 @@
 using Microsoft.JSInterop;
 using System.Threading.Tasks;
 
-namespace EasyAuthDemo
+namespace BlazorWebAsmEasyAuth
 {
     public static class LocalStorage
     {

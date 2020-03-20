@@ -10,7 +10,7 @@ using System.Text.RegularExpressions;
 using System.Text.Json.Serialization;
 using System.Linq;
 
-namespace EasyAuthDemo
+namespace BlazorWebAsmEasyAuth
 {
     public class EasyAuthAuthenticationStateProvider : AuthenticationStateProvider
     {
