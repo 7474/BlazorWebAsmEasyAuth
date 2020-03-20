@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace BlazorWebAsmEasyAuth
+namespace EasyAuthDemo
 {
     public class AuthInfo // structure based on sample here: https://cgillum.tech/2016/03/07/app-service-token-store/
     {

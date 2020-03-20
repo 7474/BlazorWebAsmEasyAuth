@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace BlazorWebAsmEasyAuth
+namespace EasyAuthDemo
 {
     public class AuthToken
     {

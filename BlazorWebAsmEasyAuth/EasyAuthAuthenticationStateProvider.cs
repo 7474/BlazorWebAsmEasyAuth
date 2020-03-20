@@ -1,7 +1,7 @@
 using System.Net.Http;
 using System.Security.Claims;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.JSInterop;
 using System.Web;
 using System;
@@ -9,20 +9,22 @@ using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.Text.Json.Serialization;
 using System.Linq;
+using Microsoft.AspNetCore.Components;
+using System.Text.Json;
 
-namespace BlazorWebAsmEasyAuth
+namespace EasyAuthDemo
 {
     public class EasyAuthAuthenticationStateProvider : AuthenticationStateProvider
     {
         private readonly HttpClient _httpClient;
         private readonly IJSRuntime _jsRuntime;
-        private readonly IUriHelper _uriHelper;
+        private readonly NavigationManager _navigationManager;
         public EasyAuthAuthenticationStateProvider(HttpClient httpClient, IJSRuntime jsRuntime,
-        IUriHelper uriHelper)
+        NavigationManager navigationManager)
         {
             _httpClient = httpClient;
             _jsRuntime = jsRuntime;
-            _uriHelper = uriHelper;
+            _navigationManager = navigationManager;
         }
 
         public override async Task<AuthenticationState> GetAuthenticationStateAsync()
@@ -35,17 +37,17 @@ namespace BlazorWebAsmEasyAuth
                 try
                 {
                     var authResponse = await _httpClient.GetStringAsync(Constants.AzureFunctionAuthURL + Constants.AuthMeEndpoint);
-                    
+
                     //To see the response uncomment the line below
                     //Console.WriteLine(authresponse);
 
                     await LocalStorage.SetAsync(_jsRuntime, "authtoken", token);
-                    var authInfo = JsonSerializer.Parse<List<AuthInfo>>(authResponse);
+                    var authInfo = JsonSerializer.Deserialize<List<AuthInfo>>(authResponse);
                     switch (authInfo[0].ProviderName)
                     {
                         case "twitter": return await GetTwitterClaims(authInfo[0]);
                         default: break;
-                    }                    
+                    }
                 }
                 catch (HttpRequestException e)
                 {
@@ -59,7 +61,7 @@ namespace BlazorWebAsmEasyAuth
         }
         private async Task<AuthToken> GetAuthToken()
         {
-            string authTokenFragment = HttpUtility.UrlDecode(new Uri(_uriHelper.GetAbsoluteUri()).Fragment);
+            string authTokenFragment = HttpUtility.UrlDecode(new Uri(_navigationManager.Uri).Fragment);
             if (string.IsNullOrEmpty(authTokenFragment))
             {
                 return await LocalStorage.GetAsync<AuthToken>(_jsRuntime, "authtoken");
@@ -71,12 +73,12 @@ namespace BlazorWebAsmEasyAuth
                 AuthToken authToken;
                 try
                 {
-                    authToken = JsonSerializer.Parse<AuthToken>(matches[0].Value);
+                    authToken = JsonSerializer.Deserialize<AuthToken>(matches[0].Value);
                 }
                 // JsonSerializer in preview, don't know what it will thow.
                 catch (Exception e)
                 {
-                    Console.WriteLine("Error in authentication token")
+                    Console.WriteLine("Error in authentication token");
                     return new AuthToken();
                 }
                 await _jsRuntime.InvokeAsync<string>(
@@ -100,10 +102,10 @@ namespace BlazorWebAsmEasyAuth
             var authresponse = await _httpClient.GetAsync(Constants.AzureFunctionAuthURL + Constants.LogOutEndpoint);
             _httpClient.DefaultRequestHeaders.Remove("X-ZUMO-AUTH");
             await LocalStorage.DeleteAsync(_jsRuntime, "authtoken");
-            if(authresponse.IsSuccessStatusCode)
+            if (authresponse.IsSuccessStatusCode)
             {
                 NotifyAuthenticationStateChanged();
-            }          
+            }
         }
         public void NotifyAuthenticationStateChanged()
         {

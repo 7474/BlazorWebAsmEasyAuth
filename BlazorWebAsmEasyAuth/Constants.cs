@@ -1,4 +1,4 @@
-namespace BlazorWebAsmEasyAuth
+namespace EasyAuthDemo
 {
     public static class Constants
     {
