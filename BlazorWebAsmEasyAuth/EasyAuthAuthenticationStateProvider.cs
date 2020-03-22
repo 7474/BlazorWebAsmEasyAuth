@@ -12,19 +12,22 @@ using System.Linq;
 using Microsoft.AspNetCore.Components;
 using System.Text.Json;
 
-namespace EasyAuthDemo
+namespace BlazorWebAsmEasyAuth
 {
     public class EasyAuthAuthenticationStateProvider : AuthenticationStateProvider
     {
         private readonly HttpClient _httpClient;
         private readonly IJSRuntime _jsRuntime;
         private readonly NavigationManager _navigationManager;
+        private readonly EasyAuthConfig _config;
+
         public EasyAuthAuthenticationStateProvider(HttpClient httpClient, IJSRuntime jsRuntime,
-        NavigationManager navigationManager)
+        NavigationManager navigationManager, EasyAuthConfig config)
         {
             _httpClient = httpClient;
             _jsRuntime = jsRuntime;
             _navigationManager = navigationManager;
+            _config = config;
         }
 
         public override async Task<AuthenticationState> GetAuthenticationStateAsync()
@@ -36,7 +39,7 @@ namespace EasyAuthDemo
                 _httpClient.DefaultRequestHeaders.Add("X-ZUMO-AUTH", token.AuthenticationToken);
                 try
                 {
-                    var authResponse = await _httpClient.GetStringAsync(Constants.AzureFunctionAuthURL + Constants.AuthMeEndpoint);
+                    var authResponse = await _httpClient.GetStringAsync(_config.AzureFunctionAuthURL + Constants.AuthMeEndpoint);
 
                     //To see the response uncomment the line below
                     //Console.WriteLine(authresponse);
@@ -61,7 +64,8 @@ namespace EasyAuthDemo
         }
         private async Task<AuthToken> GetAuthToken()
         {
-            string authTokenFragment = HttpUtility.UrlDecode(new Uri(_navigationManager.Uri).Fragment);
+            var currentUri = new Uri(_navigationManager.Uri);
+            string authTokenFragment = HttpUtility.UrlDecode(currentUri.Fragment);
             if (string.IsNullOrEmpty(authTokenFragment))
             {
                 return await LocalStorage.GetAsync<AuthToken>(_jsRuntime, "authtoken");
@@ -76,13 +80,13 @@ namespace EasyAuthDemo
                     authToken = JsonSerializer.Deserialize<AuthToken>(matches[0].Value);
                 }
                 // JsonSerializer in preview, don't know what it will thow.
-                catch (Exception e)
+                catch (Exception)
                 {
                     Console.WriteLine("Error in authentication token");
                     return new AuthToken();
                 }
-                await _jsRuntime.InvokeAsync<string>(
-                        "EasyAuthDemoUtilities.updateURLwithoutReload", Constants.BlazorWebsiteURL);
+                // Remove token.
+                _navigationManager.NavigateTo(_config.BlazorWebsiteURL, false);
                 return authToken;
             }
             return new AuthToken();
@@ -99,7 +103,7 @@ namespace EasyAuthDemo
         }
         public async Task Logout()
         {
-            var authresponse = await _httpClient.GetAsync(Constants.AzureFunctionAuthURL + Constants.LogOutEndpoint);
+            var authresponse = await _httpClient.GetAsync(_config.AzureFunctionAuthURL + Constants.LogOutEndpoint);
             _httpClient.DefaultRequestHeaders.Remove("X-ZUMO-AUTH");
             await LocalStorage.DeleteAsync(_jsRuntime, "authtoken");
             if (authresponse.IsSuccessStatusCode)
