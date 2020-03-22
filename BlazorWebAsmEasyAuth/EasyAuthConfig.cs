@@ -2,7 +2,13 @@ namespace BlazorWebAsmEasyAuth
 {
     public class EasyAuthConfig
     {
-        public string BlazorWebsiteURL { get; set; }// => "https://<client side blazor site url>";
-        public string AzureFunctionAuthURL { get; set; }// => "https://<your Azure function name>.azurewebsites.net";
+        /// <summary>
+        /// e.g. "https://<client side blazor site url>"
+        /// </summary>
+        public string BlazorWebsiteURL { get; set; }
+        /// <summary>
+        /// e.g. "https://<your Azure function name>.azurewebsites.net"
+        /// </summary>
+        public string AzureFunctionAuthURL { get; set; }
     }
 }

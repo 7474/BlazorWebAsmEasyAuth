@@ -19,7 +19,69 @@ https://docs.microsoft.com/en-us/azure/app-service/app-service-authentication-ho
 
 ### Configure Blazor WebAssembly application
 
-T.B.D.
+DI for EasyAuth settings.
+
+```cs
+public static async Task Main(string[] args)
+{
+    var builder = WebAssemblyHostBuilder.CreateDefault(args);
+    builder.RootComponents.Add<App>("app");
+
+    builder.Services.AddEasyAuth(new EasyAuthConfig()
+    {
+        BlazorWebsiteURL = "https://<client side blazor site url>",
+        AzureFunctionAuthURL = "https://<your Azure function name>.azurewebsites.net",   
+    });
+
+    await builder.Build().RunAsync();
+}
+```
+
+To log in, go to the login URL for each EazyAuth ID provider.
+
+To log out, call the EasyAuthAuthenticationStateProvider's Logout method. State changes are notified by the provider.
+
+```razor
+@inject NavigationManager _navigationManager
+@inject EasyAuthNavigationHelper _navigationHelper
+@inject EasyAuthAuthenticationStateProvider _easyAuthAuthenticationStateProvider
+
+<AuthorizeView>
+    <Authorizing>
+        <NavLink class="nav-link" href="">Authenticating</NavLink>
+    </Authorizing>
+    <NotAuthorized>
+        <NavLink class="nav-link" href="" @onclick="@LoginWithTwitter">
+            Sign In
+        </NavLink>
+    </NotAuthorized>
+    <Authorized>
+        <NavLink class="nav-link" href="">
+            <span>@context.User.Identity.Name</span>
+        </NavLink>
+        <NavLink class="nav-link" href="" @onclick="@Logout">
+            Sign Out
+        </NavLink>
+    </Authorized>
+</AuthorizeView>
+
+@code {
+    private void LoginWithTwitter()
+    {
+        _navigationManager.NavigateTo(_navigationHelper.GetLoginUrl(EasyAuthProvider.Twitter));
+    }
+
+    private async void Logout()
+    {
+        await _easyAuthAuthenticationStateProvider.Logout();
+    }
+}
+```
+
+The rest is the same as other AuthenticationStateProvider.
+
+See also Blazor authentication and authorization document.
+https://docs.microsoft.com/en-us/aspnet/core/security/blazor/
 
 
 ## Thanks
