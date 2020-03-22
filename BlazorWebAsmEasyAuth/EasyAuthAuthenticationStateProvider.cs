@@ -33,7 +33,8 @@ namespace BlazorWebAsmEasyAuth
         public override async Task<AuthenticationState> GetAuthenticationStateAsync()
         {
             AuthToken token = await GetAuthToken();
-
+            // TODO /.auth/refresh
+            // https://docs.microsoft.com/ja-jp/azure/app-service/app-service-authentication-how-to#extend-session-token-expiration-grace-period
             if (token?.AuthenticationToken != null)
             {
                 _httpClient.DefaultRequestHeaders.Add("X-ZUMO-AUTH", token.AuthenticationToken);
@@ -51,6 +52,7 @@ namespace BlazorWebAsmEasyAuth
                         case "twitter": return await GetTwitterClaims(authInfo[0]);
                         default: break;
                     }
+                    // TODO 他のプロバイダ対応。
                 }
                 catch (HttpRequestException e)
                 {
@@ -114,6 +116,14 @@ namespace BlazorWebAsmEasyAuth
         public void NotifyAuthenticationStateChanged()
         {
             NotifyAuthenticationStateChanged(GetAuthenticationStateAsync());
+        }
+        public async Task<HttpClient> GetZumoAuthedClientAsync()
+        {
+            // XXX 現状は認証状態を呼び出し側で判断する必要がある。
+            // なにかいいやり方はありそう。単にトークンを返却するだけでもいいかもしれない。
+            //var state = await GetAuthenticationStateAsync();
+            //return _httpClient.DefaultRequestHeaders.Contains("X-ZUMO-AUTH") ? _httpClient : null;
+            return _httpClient;
         }
     }
 }

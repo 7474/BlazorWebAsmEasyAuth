@@ -78,6 +78,25 @@ To log out, call the EasyAuthAuthenticationStateProvider's Logout method. State 
 }
 ```
 
+And you can get HttpClient with Zumo authentication header set.
+
+```razor
+@attribute [Authorize]
+@inject EasyAuthAuthenticationStateProvider _easyAuthAuthenticationStateProvider
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> authenticationStateTask { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Currently, it is necessary to wait for confirmation of the authentication status.
+        await authenticationStateTask;
+        var httpClient = _easyAuthAuthenticationStateProvider.GetZumoAuthedClientAsync();
+    }
+}
+```
+
 The rest is the same as other AuthenticationStateProvider.
 
 See also Blazor authentication and authorization document.
