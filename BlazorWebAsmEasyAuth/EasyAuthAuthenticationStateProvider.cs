@@ -42,17 +42,14 @@ namespace BlazorWebAsmEasyAuth
                 {
                     var authResponse = await _httpClient.GetStringAsync(_config.AzureFunctionAuthURL + Constants.AuthMeEndpoint);
 
-                    //To see the response uncomment the line below
-                    //Console.WriteLine(authresponse);
+                    if (_config.EnableLogToConsole)
+                    {
+                        Console.WriteLine(authResponse);
+                    }
 
                     await LocalStorage.SetAsync(_jsRuntime, "authtoken", token);
-                    var authInfo = JsonSerializer.Deserialize<List<AuthInfo>>(authResponse);
-                    switch (authInfo[0].ProviderName)
-                    {
-                        case "twitter": return await GetTwitterClaims(authInfo[0]);
-                        default: break;
-                    }
-                    // TODO 他のプロバイダ対応。
+                    var authInfos = JsonSerializer.Deserialize<List<AuthInfo>>(authResponse);
+                    return await ToAuthenticationState(authInfos);
                 }
                 catch (HttpRequestException e)
                 {
@@ -93,13 +90,12 @@ namespace BlazorWebAsmEasyAuth
             }
             return new AuthToken();
         }
-        private Task<AuthenticationState> GetTwitterClaims(AuthInfo authInfo)
+        private Task<AuthenticationState> ToAuthenticationState(IEnumerable<AuthInfo> authInfos)
         {
-            List<Claim> userClaims = new List<Claim>();
-            foreach (AuthUserClaim userClaim in authInfo.UserClaims)
-            {
-                userClaims.Add(new Claim(userClaim.Type, userClaim.Value));
-            }
+            // TODO Provider 固有の処理が要りそうなら処理する
+            var userClaims = authInfos.SelectMany(
+                authInfo => authInfo.UserClaims.Select(
+                    userClaim => new Claim(userClaim.Type, userClaim.Value)));
             var identity = new ClaimsIdentity(userClaims, "EasyAuth");
             return Task.FromResult(new AuthenticationState(new ClaimsPrincipal(identity)));
         }

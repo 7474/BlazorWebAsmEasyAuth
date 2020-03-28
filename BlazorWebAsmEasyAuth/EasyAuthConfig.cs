@@ -10,5 +10,7 @@ namespace BlazorWebAsmEasyAuth
         /// e.g. "https://<your Azure function name>.azurewebsites.net"
         /// </summary>
         public string AzureFunctionAuthURL { get; set; }
+
+        public bool EnableLogToConsole { get; set; }
     }
 }
