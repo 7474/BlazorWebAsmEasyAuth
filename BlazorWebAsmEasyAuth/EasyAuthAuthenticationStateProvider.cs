@@ -21,6 +21,8 @@ namespace BlazorWebAsmEasyAuth
         private readonly NavigationManager _navigationManager;
         private readonly EasyAuthConfig _config;
 
+        private DateTimeOffset estimatedSessionExpireTime;
+
         public EasyAuthAuthenticationStateProvider(HttpClient httpClient, IJSRuntime jsRuntime,
         NavigationManager navigationManager, EasyAuthConfig config)
         {
@@ -28,6 +30,7 @@ namespace BlazorWebAsmEasyAuth
             _jsRuntime = jsRuntime;
             _navigationManager = navigationManager;
             _config = config;
+            estimatedSessionExpireTime = DateTimeOffset.MinValue;
         }
 
         public override async Task<AuthenticationState> GetAuthenticationStateAsync()
@@ -37,7 +40,7 @@ namespace BlazorWebAsmEasyAuth
             // https://docs.microsoft.com/ja-jp/azure/app-service/app-service-authentication-how-to#extend-session-token-expiration-grace-period
             if (token?.AuthenticationToken != null)
             {
-                _httpClient.DefaultRequestHeaders.Add("X-ZUMO-AUTH", token.AuthenticationToken);
+                await SetSessionToken(token);
                 try
                 {
                     var authResponse = await _httpClient.GetStringAsync(_config.AzureFunctionAuthURL + Constants.AuthMeEndpoint);
@@ -47,9 +50,9 @@ namespace BlazorWebAsmEasyAuth
                         Console.WriteLine(authResponse);
                     }
 
-                    await LocalStorage.SetAsync(_jsRuntime, "authtoken", token);
                     var authInfos = JsonSerializer.Deserialize<List<AuthInfo>>(authResponse);
-                    return await ToAuthenticationState(authInfos);
+                    var authenticationState = await ToAuthenticationState(authInfos);
+                    return authenticationState;
                 }
                 catch (HttpRequestException e)
                 {
@@ -60,6 +63,10 @@ namespace BlazorWebAsmEasyAuth
             await LocalStorage.DeleteAsync(_jsRuntime, "authtoken");
             var identity = new ClaimsIdentity();
             return await Task.FromResult(new AuthenticationState(new ClaimsPrincipal(identity)));
+        }
+        private void UpdateSessionExpireTime()
+        {
+            estimatedSessionExpireTime = DateTimeOffset.UtcNow.AddSeconds(Constants.SessionTokenExpiresSec);
         }
         private async Task<AuthToken> GetAuthToken()
         {
@@ -93,21 +100,62 @@ namespace BlazorWebAsmEasyAuth
         private Task<AuthenticationState> ToAuthenticationState(IEnumerable<AuthInfo> authInfos)
         {
             // TODO Provider 固有の処理が要りそうなら処理する
+            // あと、多分一般的なクレームは競合する
             var userClaims = authInfos.SelectMany(
                 authInfo => authInfo.UserClaims.Select(
                     userClaim => new Claim(userClaim.Type, userClaim.Value)));
             var identity = new ClaimsIdentity(userClaims, "EasyAuth");
             return Task.FromResult(new AuthenticationState(new ClaimsPrincipal(identity)));
         }
+        private bool ShouldRefreshSession()
+        {
+            return DateTimeOffset.UtcNow > estimatedSessionExpireTime.AddSeconds(-1);
+        }
+        private async Task RefreshSession()
+        {
+            try
+            {
+                // CookieでのセッションはGETだがZUMO-AUTHの場合はPOSTらしい
+                var emptyContent = new StringContent("");
+                var refreshResponse = await _httpClient.PostAsync(_config.AzureFunctionAuthURL + Constants.RefreshEndpoint, emptyContent);
+                // セッションが有効な間かTwitterなどリフレッシュの概念がない場合はBadRequestって感じ。良く分らん。
+                // TODO 疎通とる
+                if (refreshResponse.IsSuccessStatusCode)
+                {
+                    var refreshResponseContent = await refreshResponse.Content.ReadAsStringAsync();
+                    var authToken = JsonSerializer.Deserialize<AuthToken>(refreshResponseContent);
+                    if (!string.IsNullOrEmpty(authToken.AuthenticationToken))
+                    {
+                        await SetSessionToken(authToken);
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("Unable to refresh session " + e.Message);
+                await InvalidateSessionToken();
+                NotifyAuthenticationStateChanged();
+            }
+        }
         public async Task Logout()
         {
             var authresponse = await _httpClient.GetAsync(_config.AzureFunctionAuthURL + Constants.LogOutEndpoint);
-            _httpClient.DefaultRequestHeaders.Remove("X-ZUMO-AUTH");
-            await LocalStorage.DeleteAsync(_jsRuntime, "authtoken");
+            await InvalidateSessionToken();
             if (authresponse.IsSuccessStatusCode)
             {
                 NotifyAuthenticationStateChanged();
             }
+        }
+        private async Task SetSessionToken(AuthToken token)
+        {
+            _httpClient.DefaultRequestHeaders.Add("X-ZUMO-AUTH", token.AuthenticationToken);
+            await LocalStorage.SetAsync(_jsRuntime, "authtoken", token);
+            UpdateSessionExpireTime();
+        }
+        private async Task InvalidateSessionToken()
+        {
+            _httpClient.DefaultRequestHeaders.Remove("X-ZUMO-AUTH");
+            await LocalStorage.DeleteAsync(_jsRuntime, "authtoken");
         }
         public void NotifyAuthenticationStateChanged()
         {
@@ -115,6 +163,11 @@ namespace BlazorWebAsmEasyAuth
         }
         public async Task<HttpClient> GetZumoAuthedClientAsync()
         {
+            if (ShouldRefreshSession())
+            {
+                await RefreshSession();
+            }
+
             // XXX 現状は認証状態を呼び出し側で判断する必要がある。
             // なにかいいやり方はありそう。単にトークンを返却するだけでもいいかもしれない。
             //var state = await GetAuthenticationStateAsync();
