@@ -36,11 +36,17 @@ namespace BlazorWebAsmEasyAuth
         public override async Task<AuthenticationState> GetAuthenticationStateAsync()
         {
             AuthToken token = await GetAuthToken();
-            // TODO /.auth/refresh
-            // https://docs.microsoft.com/ja-jp/azure/app-service/app-service-authentication-how-to#extend-session-token-expiration-grace-period
             if (token?.AuthenticationToken != null)
             {
-                await SetSessionToken(token);
+                if (ShouldRefreshSession())
+                {
+                    await SetSessionToken(token);
+                    await RefreshSession();
+                }
+                else
+                {
+                    await SetSessionToken(token);
+                }
                 try
                 {
                     var authResponse = await _httpClient.GetStringAsync(_config.AzureFunctionAuthURL + Constants.AuthMeEndpoint);
@@ -57,16 +63,20 @@ namespace BlazorWebAsmEasyAuth
                 catch (HttpRequestException e)
                 {
                     Console.WriteLine("Unable to authenticate " + e.Message);
-                    _httpClient.DefaultRequestHeaders.Remove("X-ZUMO-AUTH");
                 }
             }
-            await LocalStorage.DeleteAsync(_jsRuntime, "authtoken");
+
+            await InvalidateSessionToken();
             var identity = new ClaimsIdentity();
             return await Task.FromResult(new AuthenticationState(new ClaimsPrincipal(identity)));
         }
         private void UpdateSessionExpireTime()
         {
             estimatedSessionExpireTime = DateTimeOffset.UtcNow.AddSeconds(Constants.SessionTokenExpiresSec);
+        }
+        private void ClearSessionExpireTime()
+        {
+            estimatedSessionExpireTime = DateTimeOffset.MinValue;
         }
         private async Task<AuthToken> GetAuthToken()
         {
@@ -93,6 +103,7 @@ namespace BlazorWebAsmEasyAuth
                 }
                 // Remove token.
                 _navigationManager.NavigateTo(_config.BlazorWebsiteURL, false);
+                UpdateSessionExpireTime();
                 return authToken;
             }
             return new AuthToken();
@@ -109,10 +120,11 @@ namespace BlazorWebAsmEasyAuth
         }
         private bool ShouldRefreshSession()
         {
-            return DateTimeOffset.UtcNow > estimatedSessionExpireTime.AddSeconds(-1);
+            return DateTimeOffset.UtcNow > estimatedSessionExpireTime;
         }
-        private async Task RefreshSession()
+        private async Task<AuthToken> RefreshSession()
         {
+            // https://docs.microsoft.com/ja-jp/azure/app-service/app-service-authentication-how-to#extend-session-token-expiration-grace-period
             try
             {
                 // CookieÇ≈ÇÃÉZÉbÉVÉáÉìÇÕGETÇæÇ™ZUMO-AUTHÇÃèÍçáÇÕPOSTÇÁÇµÇ¢
@@ -127,6 +139,7 @@ namespace BlazorWebAsmEasyAuth
                     if (!string.IsNullOrEmpty(authToken.AuthenticationToken))
                     {
                         await SetSessionToken(authToken);
+                        return authToken;
                     }
                 }
             }
@@ -136,6 +149,7 @@ namespace BlazorWebAsmEasyAuth
                 await InvalidateSessionToken();
                 NotifyAuthenticationStateChanged();
             }
+            return null;
         }
         public async Task Logout()
         {
@@ -156,6 +170,7 @@ namespace BlazorWebAsmEasyAuth
         {
             _httpClient.DefaultRequestHeaders.Remove("X-ZUMO-AUTH");
             await LocalStorage.DeleteAsync(_jsRuntime, "authtoken");
+            ClearSessionExpireTime();
         }
         public void NotifyAuthenticationStateChanged()
         {
